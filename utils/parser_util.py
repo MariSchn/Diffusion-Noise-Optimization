@@ -152,6 +152,8 @@ def add_sampling_options(parser):
                        help="Number of repetitions, per sample (text prompt/action)")
     group.add_argument("--guidance_param", default=2.5, type=float,
                        help="For classifier-free sampling - specifies the s parameter, as defined in the paper.")
+    group.add_argument("--optimizer", default='adam', choices=['sgd', 'adam', 'adamw', 'lbfgs'], type=str,
+                       help="Optimizer to use for DNO .")
 
 
 def add_generate_options(parser):

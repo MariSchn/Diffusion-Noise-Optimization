@@ -260,6 +260,7 @@ def main(num_trials=3):
         noise_opt_conf = DNOOptions(
             num_opt_steps=OPTIMIZATION_STEP, # 300 if is_editing_task else 500,
             diff_penalty_scale=2e-3 if is_editing_task else 0,
+            optimizer=args.optimizer
         )
         START_FROM_NOISE = is_noise_init
 

@@ -2,6 +2,7 @@ import math
 import torch
 from tqdm import tqdm
 from dataclasses import dataclass, field
+from typing import Dict, Any
 
 
 @dataclass
@@ -38,6 +39,14 @@ class DNOOptions:
             "help": "dimension to decorrelate (we usually decorrelate time dimension)"
         },
     )
+    optimizer: str = field(
+        default="adam",
+        metadata={"help": "Optimizer to use (e.g., 'adam', 'adamw', 'sgd', 'lbfgs')"}
+    )
+    optimizer_kwargs: Dict[str, Any] = field(
+        default_factory=dict,
+        metadata={"help": "Additional keyword arguments for the optimizer"}
+    )
 
     def __post_init__(self):
         # if lr_decay_steps is not set, then set it to num_opt_steps
@@ -68,7 +77,18 @@ class DNO:
         # excluding the first dimension (batch size)
         self.dims = list(range(1, len(self.start_z.shape)))
 
-        self.optimizer = torch.optim.Adam([self.current_z], lr=conf.lr)
+        optimizer_name = conf.optimizer.lower()
+        optimizer_kwargs = conf.optimizer_kwargs
+
+        # TODO: Add more optimizers, like LBFGS
+        if optimizer_name == "adam":
+            self.optimizer = torch.optim.Adam([self.current_z], lr=conf.lr, **optimizer_kwargs)
+        elif optimizer_name == "adamw":
+            self.optimizer = torch.optim.AdamW([self.current_z], lr=conf.lr, **optimizer_kwargs)
+        elif optimizer_name == "sgd":
+            self.optimizer = torch.optim.SGD([self.current_z], lr=conf.lr, **optimizer_kwargs)
+        else:
+            raise ValueError(f"Could not resolve optimizer: {conf.optimizer}")
 
         self.lr_scheduler = []
         if conf.lr_warm_up_steps > 0:
