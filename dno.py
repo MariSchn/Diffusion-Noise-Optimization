@@ -52,7 +52,10 @@ class DNOOptions:
         # if lr_decay_steps is not set, then set it to num_opt_steps
         if self.lr_decay_steps is None:
             self.lr_decay_steps = self.num_opt_steps
-
+        
+        # when using LBFGS, set the default learning rate to 1 as it uses line search
+        if self.optimizer.lower() == "lbfgs" and self.lr == 5e-2:
+            self.lr = 1.0
 
 class DNO:
     """
@@ -80,13 +83,14 @@ class DNO:
         optimizer_name = conf.optimizer.lower()
         optimizer_kwargs = conf.optimizer_kwargs
 
-        # TODO: Add more optimizers, like LBFGS
         if optimizer_name == "adam":
             self.optimizer = torch.optim.Adam([self.current_z], lr=conf.lr, **optimizer_kwargs)
         elif optimizer_name == "adamw":
             self.optimizer = torch.optim.AdamW([self.current_z], lr=conf.lr, **optimizer_kwargs)
         elif optimizer_name == "sgd":
             self.optimizer = torch.optim.SGD([self.current_z], lr=conf.lr, **optimizer_kwargs)
+        elif optimizer_name == "lbfgs":
+            self.optimizer = torch.optim.LBFGS([self.current_z], lr=conf.lr, line_search_fn="strong_wolfe", **optimizer_kwargs)
         else:
             raise ValueError(f"Could not resolve optimizer: {conf.optimizer}")
 
@@ -119,60 +123,124 @@ class DNO:
             for i in prog:
                 info = {"step": [self.step_count] * batch_size}
 
-                # learning rate scheduler
+                # Initialize `x` and `lr_frac` here to avoid losing them in the closure when using LBFGS
+                x = None
                 lr_frac = 1
-                if len(self.lr_scheduler) > 0:
-                    for scheduler in self.lr_scheduler:
-                        lr_frac *= scheduler(self.step_count)
-                    self.set_lr(self.conf.lr * lr_frac)
-                info["lr"] = [self.conf.lr * lr_frac] * batch_size
+                if isinstance(self.optimizer, torch.optim.LBFGS):
+                    def closure():
+                        nonlocal x
 
-                # criterion
-                x = self.model(self.current_z)
-                # [batch_size,]
-                loss = self.criterion(x)
-                assert loss.shape == (batch_size,)
-                info["loss"] = loss.detach().cpu()
-                loss = loss.sum()
+                        x = self.model(self.current_z)
+                        loss = self.criterion(x)
+                        assert loss.shape == (batch_size,)
+                        info["loss"] = loss.detach().cpu()
+                        loss = loss.sum()
 
-                # diff penalty
-                if self.conf.diff_penalty_scale > 0:
+                        # diff penalty
+                        if self.conf.diff_penalty_scale > 0:
+                            # [batch_size,]
+                            loss_diff = (self.current_z - self.start_z).norm(p=2, dim=self.dims)
+                            assert loss_diff.shape == (batch_size,)
+                            loss += self.conf.diff_penalty_scale * loss_diff.sum()
+                            info["loss_diff"] = loss_diff.detach().cpu()
+                        else:
+                            info["loss_diff"] = [0] * batch_size
+
+                        # decorrelate
+                        if self.conf.decorrelate_scale > 0:
+                            loss_decorrelate = noise_regularize_1d(
+                                self.current_z,
+                                dim=self.conf.decorrelate_dim,
+                            )
+                            assert loss_decorrelate.shape == (batch_size,)
+                            loss += self.conf.decorrelate_scale * loss_decorrelate.sum()
+                            info["loss_decorrelate"] = loss_decorrelate.detach().cpu()
+                        else:
+                            info["loss_decorrelate"] = [0] * batch_size
+
+                        # backward
+                        self.optimizer.zero_grad()
+                        loss.backward()
+
+                        # log grad norm (before)
+                        info["grad_norm"] = (
+                            self.current_z.grad.norm(p=2, dim=self.dims).detach().cpu()
+                        )
+
+                        # grad mode
+                        # ? Since LBFGS uses line search, do we need to normalize the gradient ?
+                        # self.current_z.grad.data /= self.current_z.grad.norm(
+                        #     p=2, dim=self.dims, keepdim=True
+                        # )
+
+                        return loss
+
+                    self.optimizer.step(closure)
+
+                    # If the closure fails to compute x, compute it using the current z
+                    if x is None:
+                         print("! LBFGS step closure failed to compute x !")
+                         with torch.no_grad():
+                              x = self.model(self.current_z)
+
+                    # Fill the info dict with the current learning rate
+                    current_lr = self.optimizer.param_groups[0]['lr']
+                    info["lr"] = [current_lr] * batch_size
+                else:
+                    # learning rate scheduler
+                    lr_frac = 1
+                    if len(self.lr_scheduler) > 0:
+                        for scheduler in self.lr_scheduler:
+                            lr_frac *= scheduler(self.step_count)
+                        self.set_lr(self.conf.lr * lr_frac)
+                    info["lr"] = [self.conf.lr * lr_frac] * batch_size
+
+                    # criterion
+                    x = self.model(self.current_z)
                     # [batch_size,]
-                    loss_diff = (self.current_z - self.start_z).norm(p=2, dim=self.dims)
-                    assert loss_diff.shape == (batch_size,)
-                    loss += self.conf.diff_penalty_scale * loss_diff.sum()
-                    info["loss_diff"] = loss_diff.detach().cpu()
-                else:
-                    info["loss_diff"] = [0] * batch_size
+                    loss = self.criterion(x)
+                    assert loss.shape == (batch_size,)
+                    info["loss"] = loss.detach().cpu()
+                    loss = loss.sum()
 
-                # decorrelate
-                if self.conf.decorrelate_scale > 0:
-                    loss_decorrelate = noise_regularize_1d(
-                        self.current_z,
-                        dim=self.conf.decorrelate_dim,
+                    # diff penalty
+                    if self.conf.diff_penalty_scale > 0:
+                        # [batch_size,]
+                        loss_diff = (self.current_z - self.start_z).norm(p=2, dim=self.dims)
+                        assert loss_diff.shape == (batch_size,)
+                        loss += self.conf.diff_penalty_scale * loss_diff.sum()
+                        info["loss_diff"] = loss_diff.detach().cpu()
+                    else:
+                        info["loss_diff"] = [0] * batch_size
+
+                    # decorrelate
+                    if self.conf.decorrelate_scale > 0:
+                        loss_decorrelate = noise_regularize_1d(
+                            self.current_z,
+                            dim=self.conf.decorrelate_dim,
+                        )
+                        assert loss_decorrelate.shape == (batch_size,)
+                        loss += self.conf.decorrelate_scale * loss_decorrelate.sum()
+                        info["loss_decorrelate"] = loss_decorrelate.detach().cpu()
+                    else:
+                        info["loss_decorrelate"] = [0] * batch_size
+
+                    # backward
+                    self.optimizer.zero_grad()
+                    loss.backward()
+
+                    # log grad norm (before)
+                    info["grad_norm"] = (
+                        self.current_z.grad.norm(p=2, dim=self.dims).detach().cpu()
                     )
-                    assert loss_decorrelate.shape == (batch_size,)
-                    loss += self.conf.decorrelate_scale * loss_decorrelate.sum()
-                    info["loss_decorrelate"] = loss_decorrelate.detach().cpu()
-                else:
-                    info["loss_decorrelate"] = [0] * batch_size
 
-                # backward
-                self.optimizer.zero_grad()
-                loss.backward()
+                    # grad mode
+                    self.current_z.grad.data /= self.current_z.grad.norm(
+                        p=2, dim=self.dims, keepdim=True
+                    )
 
-                # log grad norm (before)
-                info["grad_norm"] = (
-                    self.current_z.grad.norm(p=2, dim=self.dims).detach().cpu()
-                )
-
-                # grad mode
-                self.current_z.grad.data /= self.current_z.grad.norm(
-                    p=2, dim=self.dims, keepdim=True
-                )
-
-                # optimize z
-                self.optimizer.step()
+                    # optimize z
+                    self.optimizer.step()
 
                 # noise perturbation
                 # match the noise fraction to the learning rate fraction
