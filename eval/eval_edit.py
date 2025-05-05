@@ -159,13 +159,6 @@ def main():
     # We will generate a new original motion for each batch
     n_keyframe = 1
 
-    num_ode_steps = 10
-    OPTIMIZATION_STEP = 300
-    noise_opt_conf = DNOOptions(
-        num_opt_steps=OPTIMIZATION_STEP,
-        diff_penalty_scale=2e-3,
-        decorrelate_scale=0,
-    )
 
     args = generate_args()
     args.device = 0
@@ -174,6 +167,17 @@ def main():
     print(args.arch)
 
     fixseed(args.seed)
+
+    num_ode_steps = 10
+    OPTIMIZATION_STEP = 300
+    if "lbfgs" in args.optimizer:
+        OPTIMIZATION_STEP = 20
+    noise_opt_conf = DNOOptions(
+        num_opt_steps=OPTIMIZATION_STEP,
+        diff_penalty_scale=2e-3,
+        decorrelate_scale=0,
+        optimizer=args.optimizer,
+    )
 
     out_path = args.output_dir
     name = os.path.basename(os.path.dirname(args.model_path))
@@ -187,7 +191,7 @@ def main():
     dist_util.setup_dist(args.device)
     # Output directory
     out_path = os.path.join(
-        os.path.dirname(args.model_path),
+        out_path,
         "eval_edit_{}".format(niter),
     )
     out_path = os.path.join(out_path, f"seed{args.seed}")
