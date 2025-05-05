@@ -89,7 +89,7 @@ class DNO:
             self.optimizer = torch.optim.AdamW([self.current_z], lr=conf.lr, **optimizer_kwargs)
         elif optimizer_name == "sgd":
             self.optimizer = torch.optim.SGD([self.current_z], lr=conf.lr, **optimizer_kwargs)
-        elif optimizer_name == "lbfgs":
+        elif optimizer_name == "lbfgs" or optimizer_name == "lbfgs_normalized":
             self.optimizer = torch.optim.LBFGS([self.current_z], lr=conf.lr, line_search_fn="strong_wolfe", **optimizer_kwargs)
         else:
             raise ValueError(f"Could not resolve optimizer: {conf.optimizer}")
@@ -169,9 +169,11 @@ class DNO:
 
                         # grad mode
                         # ? Since LBFGS uses line search, do we need to normalize the gradient ?
-                        # self.current_z.grad.data /= self.current_z.grad.norm(
-                        #     p=2, dim=self.dims, keepdim=True
-                        # )
+                        if self.conf.optimizer == "lbfgs_normalized":
+                            self.current_z.grad.data /= self.current_z.grad.norm(
+                                p=2, dim=self.dims, keepdim=True
+                            )
+
 
                         return loss
 
