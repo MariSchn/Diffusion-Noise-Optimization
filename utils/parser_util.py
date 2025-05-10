@@ -152,7 +152,7 @@ def add_sampling_options(parser):
                        help="Number of repetitions, per sample (text prompt/action)")
     group.add_argument("--guidance_param", default=2.5, type=float,
                        help="For classifier-free sampling - specifies the s parameter, as defined in the paper.")
-    group.add_argument("--optimizer", default='adam', choices=['sgd', 'adam', 'adamw', 'lbfgs', 'lbfgs_normalized'], type=str,
+    group.add_argument("--optimizer", default='adam', choices=['sgd', 'rmsprop', 'adam', 'adamw', 'lbfgs', 'lbfgs_normalized'], type=str,
                        help="Optimizer to use for DNO .")
 
 
@@ -256,4 +256,5 @@ def evaluation_parser():
     # args specified by the user: (all other will be loaded from the model)
     add_base_options(parser)
     add_evaluation_options(parser)
+    add_sampling_options(parser) # Add to be able to specify optimizer during evaluation
     return parse_and_load_from_model(parser)

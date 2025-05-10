@@ -41,7 +41,7 @@ class DNOOptions:
     )
     optimizer: str = field(
         default="adam",
-        metadata={"help": "Optimizer to use (e.g., 'adam', 'adamw', 'sgd', 'lbfgs')"}
+        metadata={"help": "Optimizer to use (e.g., 'adam', 'adamw', 'sgd', 'rmsprop', 'lbfgs', 'lbfgs_normalized')"}
     )
     optimizer_kwargs: Dict[str, Any] = field(
         default_factory=dict,
@@ -84,12 +84,19 @@ class DNO:
         optimizer_kwargs = conf.optimizer_kwargs
 
         if optimizer_name == "adam":
+            print("Using Adam optimizer")
             self.optimizer = torch.optim.Adam([self.current_z], lr=conf.lr, **optimizer_kwargs)
         elif optimizer_name == "adamw":
+            print("Using AdamW optimizer")
             self.optimizer = torch.optim.AdamW([self.current_z], lr=conf.lr, **optimizer_kwargs)
         elif optimizer_name == "sgd":
+            print("Using SGD optimizer")
             self.optimizer = torch.optim.SGD([self.current_z], lr=conf.lr, **optimizer_kwargs)
+        elif optimizer_name == "rmsprop":
+            print("Using RMSProp optimizer")
+            self.optimizer = torch.optim.RMSprop([self.current_z], lr=conf.lr, **optimizer_kwargs)
         elif optimizer_name == "lbfgs" or optimizer_name == "lbfgs_normalized":
+            print("Using LBFGS optimizer" if optimizer_name == "lbfgs" else "Using normalized LBFGS optimizer")
             self.optimizer = torch.optim.LBFGS([self.current_z], lr=conf.lr, line_search_fn="strong_wolfe", **optimizer_kwargs)
         else:
             raise ValueError(f"Could not resolve optimizer: {conf.optimizer}")

@@ -179,6 +179,9 @@ def main():
         optimizer=args.optimizer,
     )
 
+    # optimization steps at which metrics will be calculated (currently hard coded to evaluate at 10 steps)
+    evaluate_at = np.linspace(0, OPTIMIZATION_STEP - 1, num=10, dtype=int).tolist()
+
     out_path = args.output_dir
     name = os.path.basename(os.path.dirname(args.model_path))
     niter = os.path.basename(args.model_path).replace("model", "").replace(".pt", "")
@@ -428,7 +431,7 @@ def main():
     ######################
     ## START OPTIMIZING ##
     ######################
-    output_list = []
+    output_lists = [[] for _ in range(len(evaluate_at))] # Store the outputs at different (intermediate) steps
     target_list = []
     target_mask_list = []
     
@@ -517,160 +520,180 @@ def main():
             out = noise_opt()
             final_out = out["x"].detach().clone()
             final_z = out["z"].detach().clone()
+            hist = out["hist"] # list of history for each sample in the batch, i.e. len(hist) = opt_batch_size
 
             # 4. Inference again
-            final_motion_full_inf = diffusion.ddim_sample_loop(
-                model,
-                (opt_batch_size, model.njoints, model.nfeats, final_z.shape[3]),
-                clip_denoised=False,  # not args.predict_xstart,
-                model_kwargs=model_kwargs,
-                skip_timesteps=0,
-                init_image=None,
-                progress=True,
-                dump_steps=None,
-                noise=final_z,
-            )
-            final_motion = final_motion_full_inf
-            # Save the results per batch
-            torch.save(final_motion, batch_path)
+            for i, step in enumerate(evaluate_at):
+                z = torch.stack([sample["z"][step] for sample in hist], dim=0).to(model_device)
+
+                final_motion_full_inf = diffusion.ddim_sample_loop(
+                    model,
+                    (opt_batch_size, model.njoints, model.nfeats, z.shape[3]),
+                    clip_denoised=False,  # not args.predict_xstart,
+                    model_kwargs=model_kwargs,
+                    skip_timesteps=0,
+                    init_image=None,
+                    progress=True,
+                    dump_steps=None,
+                    noise=z,
+                )
+
+                final_motion = final_motion_full_inf
+                # Save the results per batch
+                # * Currently disabled to prevent exceeding storage quota
+                # torch.save(final_motion, os.path.join(out_path, f"batch_{ii}_step_{step}.pt"))
+
+                for j in range(opt_batch_size):
+                    output_lists[i].append(final_motion[j])
         # Add to output list
-        for jj in range(opt_batch_size):
-            output_list.append(final_motion[jj])
+        # This is already taken care of in the loop above, saving intermediate results
+        # for jj in range(opt_batch_size):
+        #     output_list.append(final_motion[jj])
 
     #######################
     ### COMPUTE RESULTS ###
     #######################
 
-    generated_motions = []
-    generated_motions_rep = []
-    # convert the generated motion to skeleton
-    for generated in output_list:
-        generated_motions_rep.append(generated)
-        generated = sample_to_motion(generated.unsqueeze(0), data.dataset, model, abs_3d=False)
-        generated = generated.permute(0, 3, 1, 2)
-        generated_motions.append(generated)
-    # for FID
-    generated_motions_rep = torch.stack(generated_motions_rep, dim=0)
-    motion_before_edit = sample_to_motion(sample_before_edit, data.dataset, model, abs_3d=False).permute(0, 3, 1, 2)
+    for output_list, step in zip(output_lists, evaluate_at): 
+        generated_motions = []
+        generated_motions_rep = []
+        # convert the generated motion to skeleton
+        for generated in output_list:
+            generated_motions_rep.append(generated)
+            generated = sample_to_motion(generated.unsqueeze(0), data.dataset, model, abs_3d=False)
+            generated = generated.permute(0, 3, 1, 2)
+            generated_motions.append(generated)
+        # for FID
+        generated_motions_rep = torch.stack(generated_motions_rep, dim=0)
+        motion_before_edit = sample_to_motion(sample_before_edit, data.dataset, model, abs_3d=False).permute(0, 3, 1, 2)
 
-    # (num_samples, x, x, x)
-    generated_motions = torch.cat(generated_motions, dim=0)
-    target_motions = torch.stack(target_list, dim=0).detach().cpu()
-    target_masks = torch.stack(target_mask_list, dim=0).detach().cpu()
+        # (num_samples, x, x, x)
+        generated_motions = torch.cat(generated_motions, dim=0)
+        target_motions = torch.stack(target_list, dim=0).detach().cpu()
+        target_masks = torch.stack(target_mask_list, dim=0).detach().cpu()
 
-    save_dir = out_path
-    # save_dir = os.path.join(os.path.dirname(args.model_path), f'eval_{task}_{noise_opt_conf.name}')
-    log_file = os.path.join(save_dir, f'eval_N{max_samples}.txt')
+        save_dir = out_path
+        # save_dir = os.path.join(os.path.dirname(args.model_path), f'eval_{task}_{noise_opt_conf.name}')
+        log_file = os.path.join(save_dir, f'eval_N{max_samples}.txt')
 
-    DEBUG = True
-    if DEBUG:
-        print("Saving debug videos...")
-        for ii in range(len(motion_before_edit)):
-            before_edit_id = f'{ii:05d}'
-            plot_debug(motion_before_edit[ii], os.path.join(save_dir, f"before_edit_{before_edit_id}.mp4"), data, n_frames)
+        # * Currently disabled to prevent exceeding storage quota
+        DEBUG = False
+        if DEBUG:
+            print("Saving debug videos...")
+            for ii in range(len(motion_before_edit)):
+                before_edit_id = f'{ii:05d}'
+                plot_debug(motion_before_edit[ii], os.path.join(save_dir, f"before_edit_{before_edit_id}.mp4"), data, n_frames)
 
-        start_from = 0  # 14
-        for ii in range(start_from, len(generated_motions)): 
-            motion_id = f'{ii:05d}'
-            before_edit_id = f'{(ii//opt_batch_size):05d}'
-            plot_debug(generated_motions[ii], os.path.join(save_dir, f"{motion_id}_gen.mp4"), data, n_frames)
-            # plot_debug(target_motions[ii], os.path.join(save_dir, f"{motion_id}_target.mp4"), gen_loader, motion_lengths[ii])
-            # Concat the two videos
-            os.system(f"ffmpeg -y -loglevel warning -i {save_dir}/before_edit_{before_edit_id}.mp4 -i {save_dir}/{motion_id}_gen.mp4 -filter_complex hstack {save_dir}/{motion_id}_combined.mp4")
-            # Remove the generated video
-            os.system(f"rm {save_dir}/{motion_id}_gen.mp4")
-            # if ii > 20:
-            if ii > 5:
-                break
-            
-    SAVE_FOR_VIS = False
-    if SAVE_FOR_VIS:
-        # Edited motion
-        npy_path = os.path.join(out_path, "results.npy")
-        all_motions = generated_motions.permute(0, 2, 3, 1).detach().cpu().numpy()
-        print(f"saving results file to [{npy_path}]")
-        np.save(
-            npy_path,
-            {
-                "motion": all_motions,
-                "text": all_text,
-                "lengths": np.array([n_frames] * len(generated_motions)),
-                "num_samples": args.num_samples,
-                "num_repetitions": args.num_repetitions,
-            },
-        )
-        # Before edit motion
-        npy_path = os.path.join(out_path, "results_before_edit.npy")
-        all_motions = motion_before_edit.permute(0, 2, 3, 1).detach().cpu().numpy()
-        print(f"saving results file to [{npy_path}]")
-        np.save(
-            npy_path,
-            {
-                "motion": all_motions,
-                "text": all_text,
-                "lengths": np.array([n_frames] * len(motion_before_edit)),
-                "num_samples": args.num_samples,
-                "num_repetitions": args.num_repetitions,
-            },
-        )
-        # Save pelvis location change
-        # Save additional_objects to a pickle file
-        pickle_file = os.path.join(out_path, "edit_trajectories.pkl")
-        keyframes_edit = []
-        st_edit = []
-        ed_edit = []
-        # loop over target mask to find where the keyframes are for each motion
-        for cur_id, target_mask in enumerate(target_masks):
-            if cur_id > 15:
-                break
-            keyframe = torch.where(target_mask)[0][0].data
-            keyframes_edit.append(keyframe)
-            before_edit_idx = 0
-            st_edit.append(motion_before_edit[before_edit_idx, keyframe, 0, :])
-            ed_edit.append(generated_motions[cur_id, keyframe, 0, :])
-        keyframes_edit = torch.stack(keyframes_edit).detach().cpu().numpy()
-        st_edit = torch.stack(st_edit).detach().cpu().numpy()
-        ed_edit = torch.stack(ed_edit).detach().cpu().numpy()
-        edit_trajs = {
-            "keyframes": keyframes_edit,
-            "start": st_edit,
-            "end": ed_edit,
-        }
-        with open(pickle_file, "wb") as f:
-            pickle.dump(edit_trajs, f)
+            start_from = 0  # 14
+            for ii in range(start_from, len(generated_motions)): 
+                motion_id = f'{ii:05d}'
+                before_edit_id = f'{(ii//opt_batch_size):05d}'
+                plot_debug(generated_motions[ii], os.path.join(save_dir, f"{motion_id}_gen.mp4"), data, n_frames)
+                # plot_debug(target_motions[ii], os.path.join(save_dir, f"{motion_id}_target.mp4"), gen_loader, motion_lengths[ii])
+                # Concat the two videos
+                os.system(f"ffmpeg -y -loglevel warning -i {save_dir}/before_edit_{before_edit_id}.mp4 -i {save_dir}/{motion_id}_gen.mp4 -filter_complex hstack {save_dir}/{motion_id}_combined.mp4")
+                # Remove the generated video
+                os.system(f"rm {save_dir}/{motion_id}_gen.mp4")
+                # if ii > 20:
+                if ii > 5:
+                    break
+                
+        # * Currently disabled to prevent exceeding storage quota
+        SAVE_FOR_VIS = False
+        if SAVE_FOR_VIS:
+            # Edited motion
+            npy_path = os.path.join(out_path, "results.npy")
+            all_motions = generated_motions.permute(0, 2, 3, 1).detach().cpu().numpy()
+            print(f"saving results file to [{npy_path}]")
+            np.save(
+                npy_path,
+                {
+                    "motion": all_motions,
+                    "text": all_text,
+                    "lengths": np.array([n_frames] * len(generated_motions)),
+                    "num_samples": args.num_samples,
+                    "num_repetitions": args.num_repetitions,
+                },
+            )
+            # Before edit motion
+            npy_path = os.path.join(out_path, "results_before_edit.npy")
+            all_motions = motion_before_edit.permute(0, 2, 3, 1).detach().cpu().numpy()
+            print(f"saving results file to [{npy_path}]")
+            np.save(
+                npy_path,
+                {
+                    "motion": all_motions,
+                    "text": all_text,
+                    "lengths": np.array([n_frames] * len(motion_before_edit)),
+                    "num_samples": args.num_samples,
+                    "num_repetitions": args.num_repetitions,
+                },
+            )
+            # Save pelvis location change
+            # Save additional_objects to a pickle file
+            pickle_file = os.path.join(out_path, "edit_trajectories.pkl")
+            keyframes_edit = []
+            st_edit = []
+            ed_edit = []
+            # loop over target mask to find where the keyframes are for each motion
+            for cur_id, target_mask in enumerate(target_masks):
+                if cur_id > 15:
+                    break
+                keyframe = torch.where(target_mask)[0][0].data
+                keyframes_edit.append(keyframe)
+                before_edit_idx = 0
+                st_edit.append(motion_before_edit[before_edit_idx, keyframe, 0, :])
+                ed_edit.append(generated_motions[cur_id, keyframe, 0, :])
+            keyframes_edit = torch.stack(keyframes_edit).detach().cpu().numpy()
+            st_edit = torch.stack(st_edit).detach().cpu().numpy()
+            ed_edit = torch.stack(ed_edit).detach().cpu().numpy()
+            edit_trajs = {
+                "keyframes": keyframes_edit,
+                "start": st_edit,
+                "end": ed_edit,
+            }
+            with open(pickle_file, "wb") as f:
+                pickle.dump(edit_trajs, f)
 
 
-    metrics, metrics_before_edit, fid = calculate_results(motion_before_edit, generated_motions, target_motions, 
-                                                     target_masks, n_frames, n_keyframe, text=args.text_prompt, 
-                                                     dataset=data.dataset, 
-                                                     motion_before_edit_rep=sample_before_edit if do_calculate_fid else None,
-                                                     holdout_before_edit_rep=sample_holdout if do_calculate_fid else None,
-                                                     generated_motions_rep=generated_motions_rep if do_calculate_fid else None,
-                                                     )
+        metrics, metrics_before_edit, fid = calculate_results(motion_before_edit, generated_motions, target_motions, 
+                                                        target_masks, n_frames, n_keyframe, text=args.text_prompt, 
+                                                        dataset=data.dataset, 
+                                                        motion_before_edit_rep=sample_before_edit if do_calculate_fid else None,
+                                                        holdout_before_edit_rep=sample_holdout if do_calculate_fid else None,
+                                                        generated_motions_rep=generated_motions_rep if do_calculate_fid else None,
+                                                        )
 
-    with open(log_file, 'w') as f:
-        for (name, eval_results) in zip(["Before Edit", "After Edit"], [metrics_before_edit, metrics]):
-            print(f"==================== {name} ====================")
-            print(f"==================== {name} ====================", file=f, flush=True)
-            for metric_name, metric_values in eval_results.items():
-                metric_values = np.array(metric_values)
-                unit_name = ""
-                if metric_name == "Jitter":
-                    unit_name = "(m/s^3)"
-                elif metric_name == "Foot skating":
-                    unit_name = "(ratio)"
-                elif metric_name == "Content preservation":
-                    unit_name = "(ratio)"
-                elif metric_name == "Objective Error":
-                    unit_name = "(m)"
-                print(f"Metric [{metric_name} {unit_name}]: Mean {metric_values.mean():.4f}, Std {metric_values.std():.4f}")
-                print(f"Metric [{metric_name} {unit_name}]: Mean {metric_values.mean():.4f}, Std {metric_values.std():.4f}", file=f, flush=True)
+        with open(log_file, 'w') as f:
+            print(f"==================== {step} ====================")
+            print(f"==================== {step} ====================", file=f, flush=True)
+            for (name, eval_results) in zip(["Before Edit", "After Edit"], [metrics_before_edit, metrics]):
+                print(f"==================== {name} ====================")
+                print(f"==================== {name} ====================", file=f, flush=True)
+                for metric_name, metric_values in eval_results.items():
+                    metric_values = np.array(metric_values)
+                    unit_name = ""
+                    if metric_name == "Jitter":
+                        unit_name = "(m/s^3)"
+                    elif metric_name == "Foot skating":
+                        unit_name = "(ratio)"
+                    elif metric_name == "Content preservation":
+                        unit_name = "(ratio)"
+                    elif metric_name == "Objective Error":
+                        unit_name = "(m)"
+                    print(f"Metric [{metric_name} {unit_name}]: Mean {metric_values.mean():.4f}, Std {metric_values.std():.4f}")
+                    print(f"Metric [{metric_name} {unit_name}]: Mean {metric_values.mean():.4f}, Std {metric_values.std():.4f}", file=f, flush=True)
 
-        print(f"==================== FID ====================")
-        print(f"==================== FID ====================", file=f, flush=True)
-        for k, v in fid.items():
-            print(f"{k}: {v:.4f}")
-            print(f"{k}: {v:.4f}", file=f, flush=True)
+            # Save metrics to a JSON file
+            metrics_file = os.path.join(save_dir, f"metrics_step_{step}.json")
+            with open(metrics_file, "w") as metrics_fw:
+                json.dump({"Before Edit": metrics_before_edit, "After Edit": metrics, "FID": fid}, metrics_fw, indent=4)
+
+            print(f"==================== FID ====================")
+            print(f"==================== FID ====================", file=f, flush=True)
+            for k, v in fid.items():
+                print(f"{k}: {v:.4f}")
+                print(f"{k}: {v:.4f}", file=f, flush=True)
 
     return
 
