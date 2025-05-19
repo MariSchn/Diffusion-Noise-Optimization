@@ -153,8 +153,8 @@ def main():
     "a person is crawling", "a person is doing a long jump"
     The command is: python -m eval.eval_edit --model_path ./save/mdm_avg/model000500000.pt --text_prompt "...(above text)..."
     '''
-    max_samples = 96 # 32
-    opt_batch_size = 16 # 4
+    max_samples = 6 # 32
+    opt_batch_size = 6 # 4
     num_total_batches = math.ceil(max_samples / opt_batch_size)
     # We will generate a new original motion for each batch
     n_keyframe = 1
@@ -292,157 +292,24 @@ def main():
     initial_noise = torch.randn((args.batch_size, model.njoints, model.nfeats, n_frames)).to(model_device)
     
     sample_file = os.path.join(out_path, "sample_before_edit.pt")
-    # Load sample_before_edit from file if exists
-    if os.path.exists(sample_file):
-        print(f" - Sample already exists. Loading sample_before_edit from [{sample_file}]")
-        sample = torch.load(sample_file)
-    else:
-        # Generate initial noise based on initialization method
-        shape = (args.batch_size, model.njoints, model.nfeats, n_frames)
-        
-        # Set seed for reproducibility
-        torch.manual_seed(args.seed)
-        
-        if args.noise_init == "clip":
-            print(f"Using text-based noise initialization with seed {args.seed}")
-            # Get text embeddings from CLIP using the base model
-            # Encode text
-            text_embeddings = model.model.encode_text(texts)  # shape: [batch_size, clip_dim]
-            batch_size, clip_dim = text_embeddings.shape
-            njoints, nfeats, n_frames = model.njoints, model.nfeats, n_frames
-            target_shape = (batch_size, njoints, nfeats, n_frames)
 
-            # Total number of elements in the target tensor
-            target_elements = njoints * nfeats * n_frames
-
-            # Flatten target shape (excluding batch) for reshaping
-            text_embeddings_expanded = torch.zeros((batch_size, target_elements), device=text_embeddings.device)
-
-            # Fill as much of the last dimension as possible with CLIP values
-            max_clip_insert = min(clip_dim, n_frames)
-            remaining_dims = njoints * nfeats
-
-            # Project or pad CLIP embeddings into the last dim (n_frames)
-            clip_proj = text_embeddings[:, :max_clip_insert]  # [batch_size, n_used_clip_dim]
-
-            # Fill the last `max_clip_insert` of n_frames in every joint-feat slot
-            # We'll tile it across njoints * nfeats
-            text_embeddings_expanded = torch.randn((batch_size, target_elements), device=text_embeddings.device)
-
-            # Insert clip values in the last dim per (joint, feat)
-            for i in range(remaining_dims):
-                start = i * n_frames + (n_frames - max_clip_insert)
-                end = i * n_frames + n_frames
-                text_embeddings_expanded[:, start:end] = clip_proj
-
-            # Reshape to desired shape
-            initial_noise = text_embeddings_expanded.view(batch_size, njoints, nfeats, n_frames) * 0.5 + initial_noise * 0.5
-            # Normalize to roughly match standard normal distribution
-            # initial_noise = (initial_noise - initial_noise.mean()) / initial_noise.std()
-            
-        elif args.noise_init == "sin":
-            print(f"Using sinusoidal noise initialization with seed {args.seed}")
-            # Create sinusoidal noise pattern
-            t = torch.linspace(0, 10*math.pi, n_frames).to(model_device)
-            frequencies = torch.linspace(0.1, 2.0, model.njoints*model.nfeats).to(model_device)
-            phases = torch.rand(model.njoints*model.nfeats).to(model_device) * 2 * math.pi
-            
-            sin_patterns = torch.sin(t.view(1, 1, 1, -1) * 
-                                    frequencies.view(1, -1, 1, 1) + 
-                                    phases.view(1, -1, 1, 1))
-            sin_patterns = sin_patterns.reshape(1, model.njoints, model.nfeats, n_frames)
-            sin_patterns = sin_patterns.repeat(args.batch_size, 1, 1, 1)
-            
-            # Scale to match standard normal distribution 
-            # To preserve learnt noise scheduling i.e N(0, 1)
-            initial_noise = sin_patterns * 0.5  
-            initial_noise += torch.randn_like(initial_noise) * 0.1
-            
-        elif args.noise_init == "perlin":
-            print(f"Using Perlin noise initialization with seed {args.seed}")
-            # Empty tensor to fill with Perlin noise
-            initial_noise = torch.zeros(shape).to(model_device)
-            
-            # Generate Perlin noise
-            scale = 0.1
-            for b in range(args.batch_size):
-                for j in range(model.njoints):
-                    for f in range(model.nfeats):
-                        for t in range(n_frames):
-                            # Generate smoother noise with Perlin
-                            value = pnoise3(j*scale, f*scale, t*scale)
-                            initial_noise[b, j, f, t] = value 
-
-            initial_noise = initial_noise * 0.5 + torch.randn_like(initial_noise) * 0.5  # Scale to roughly match normal distribution
-            # initial_noise = (initial_noise - initial_noise.mean()) / initial_noise.std() # Z normalization
-
-        elif args.noise_init == "clip_perlin":
-            # Empty tensor to fill with Perlin noise
-            initial_noise = torch.zeros(shape).to(model_device)
-            
-            # Generate Perlin noise
-            scale = 0.1
-            for b in range(args.batch_size):
-                for j in range(model.njoints):
-                    for f in range(model.nfeats):
-                        for t in range(n_frames):
-                            # Generate smoother noise with Perlin
-                            value = pnoise3(j*scale, f*scale, t*scale)
-                            initial_noise[b, j, f, t] = value 
-
-            text_embeddings = model.model.encode_text(texts)  # shape: [batch_size, clip_dim]
-            batch_size, clip_dim = text_embeddings.shape
-            njoints, nfeats, n_frames = model.njoints, model.nfeats, n_frames
-            target_shape = (batch_size, njoints, nfeats, n_frames)
-
-            # Total number of elements in the target tensor
-            target_elements = njoints * nfeats * n_frames
-
-            # Flatten target shape (excluding batch) for reshaping
-            text_embeddings_expanded = torch.zeros((batch_size, target_elements), device=text_embeddings.device)
-
-            # Fill as much of the last dimension as possible with CLIP values
-            max_clip_insert = min(clip_dim, n_frames)
-            remaining_dims = njoints * nfeats
-
-            # Project or pad CLIP embeddings into the last dim (n_frames)
-            clip_proj = text_embeddings[:, :max_clip_insert]  # [batch_size, n_used_clip_dim]
-
-            # Fill the last `max_clip_insert` of n_frames in every joint-feat slot
-            # We'll tile it across njoints * nfeats
-            text_embeddings_expanded = torch.randn((batch_size, target_elements), device=text_embeddings.device)
-
-            # Insert clip values in the last dim per (joint, feat)
-            for i in range(remaining_dims):
-                start = i * n_frames + (n_frames - max_clip_insert)
-                end = i * n_frames + n_frames
-                text_embeddings_expanded[:, start:end] = clip_proj
-
-            # Reshape to desired shape
-            initial_noise = text_embeddings_expanded.view(batch_size, njoints, nfeats, n_frames) * 0.5 + initial_noise * 0.5
-
-            
-        else:
-            print(f"Using random noise initialization with seed {args.seed}")
-            initial_noise = torch.randn(shape).to(model_device)
-
-            # List of samples of shape [bs, njoints, nfeats, nframes]
-            sample = diffusion_ori.ddim_sample_loop(
-                model,
-                (args.batch_size, model.njoints, model.nfeats, n_frames),
-                clip_denoised=False,
-                # clip_denoised=not args.predict_xstart,
-                model_kwargs=model_kwargs,
-                skip_timesteps=0,
-                init_image=None,
-                progress=True,
-                dump_steps=None,
-                noise=None,
-                const_noise=False,
-                cond_fn=None,
-            )
-            # Save sample to file
-            torch.save(sample, sample_file)
+    # List of samples of shape [bs, njoints, nfeats, nframes]
+    sample = diffusion_ori.ddim_sample_loop(
+        model,
+        (args.batch_size, model.njoints, model.nfeats, n_frames),
+        clip_denoised=False,
+        # clip_denoised=not args.predict_xstart,
+        model_kwargs=model_kwargs,
+        skip_timesteps=0,
+        init_image=None,
+        progress=True,
+        dump_steps=None,
+        noise=None,
+        const_noise=False,
+        cond_fn=None,
+    )
+    # Save sample to file
+    torch.save(sample, sample_file)
 
     def generate_holdout_dataset_for_FID(N_holdout, batch_size):
         # generating the hold out dataset for FID calculation
@@ -545,24 +412,8 @@ def main():
         raise ValueError("Unknown task")
 
     ######################
-    ### DDIM INVERSION ###
-    ######################
-    # Set text to empty
-    model_kwargs["y"]["text"] = [""]
-    inv_noise = ddim_invert(
-        diffusion_ori,
-        model,
-        sample.clone(),
-        model_kwargs=model_kwargs,
-        dump_steps=[],
-        num_inference_steps=100,
-        clip_denoised=False,
-    )
-
-    ######################
     ## START OPTIMIZING ##
     ######################
-    output_lists = [[] for _ in range(len(evaluate_at))] # Store the outputs at different (intermediate) steps
     output_lists = [[] for _ in range(len(evaluate_at))] # Store the outputs at different (intermediate) steps
     target_list = []
     target_mask_list = []
@@ -616,11 +467,6 @@ def main():
                     * args.guidance_param
                 )
 
-            # Diffent original motion for each batch
-            cur_xt = inv_noise[ii].detach().clone()
-            cur_xt = cur_xt.repeat(opt_batch_size, 1, 1, 1)
-            cur_xt = cur_xt.detach().requires_grad_()
-
             loss_fn = CondKeyLocationsLoss(
                 target=target,
                 target_mask=target_mask,
@@ -643,6 +489,96 @@ def main():
                     clip_denoised=False,
                     gradient_checkpoint=False,
                 )
+            
+            # --- START OF Batched Random Search ---
+            print(f"Performing random search (batched targets, looping trials) for DNO batch {ii+1}/{num_total_batches} (opt_batch_size: {opt_batch_size})...")
+            num_random_search_trials = 25  # Number of random noises to try for each item in opt_batch
+
+            # Initialize placeholders for the best noise found for each of the opt_batch_size items
+            # and their corresponding minimum losses.
+            # These will be updated across the trials.
+            best_noises_for_opt_batch = torch.zeros(
+                (opt_batch_size, model.njoints, model.nfeats, n_frames), 
+                device=model_device
+            )
+            min_losses_for_opt_batch = torch.full(
+                (opt_batch_size,), float('inf'), device=model_device
+            )
+
+            # The `model_kwargs` prepared before this block is already set up for `opt_batch_size`.
+            # This includes text conditioning, scale, etc. This is exactly what we need for each trial.
+            # The `target` and `target_mask` are also already for `opt_batch_size`.
+
+            # Create the loss function once, as it will operate on opt_batch_size items.
+            # `target` and `target_mask` are already shaped [opt_batch_size, n_frames, 22, 3]
+            loss_fn_for_opt_batch = CondKeyLocationsLoss(
+                target=target, # This is the `target` for the current DNO batch of size opt_batch_size
+                target_mask=target_mask, # Similarly for `target_mask`
+                transform=data.dataset.t2m_dataset.transform_th,
+                inv_transform=data.dataset.t2m_dataset.inv_transform_th,
+                abs_3d=False,
+                use_mse_loss=False,
+                use_rand_projection=False,
+                obs_list=obs_list,
+            )
+            # The `model_kwargs` here is the one prepared for the DNO step (size opt_batch_size)
+            criterion_for_opt_batch = lambda x_gen: loss_fn_for_opt_batch(x_gen, **model_kwargs)
+
+            # Loop through the number of random search trials
+            for trial_num in range(num_random_search_trials):
+                if trial_num % (num_random_search_trials // 5 + 1) == 0 : # Print progress periodically
+                     print(f"  - Random search trial {trial_num + 1}/{num_random_search_trials}...")
+                
+                # Generate a batch of random noise candidates, one for each of the opt_batch_size items.
+                # Shape: [opt_batch_size, model.njoints, model.nfeats, n_frames]
+                current_trial_candidate_noises = torch.randn(
+                    (opt_batch_size, model.njoints, model.nfeats, n_frames), 
+                    device=model_device
+                )
+                
+                with torch.no_grad(): # Random search evaluation does not require gradients
+                    # Generate motions for all opt_batch_size items using their respective candidate noises for this trial.
+                    # `model_kwargs` is already suitable for opt_batch_size.
+                    x0_candidate_motions_trial = diffusion_ori.ddim_sample_loop(
+                        model,
+                        (opt_batch_size, model.njoints, model.nfeats, n_frames),
+                        noise=current_trial_candidate_noises,
+                        model_kwargs=model_kwargs, # This is the main model_kwargs for opt_batch_size
+                        clip_denoised=False,
+                        progress=False, # Suppress progress bar for these inner DDIM calls
+                    )
+                    
+                    # Calculate losses for all opt_batch_size generated motions against their respective targets.
+                    # current_trial_losses will have shape [opt_batch_size]
+                    current_trial_losses = criterion_for_opt_batch(x0_candidate_motions_trial)
+
+                # Update best_noises_for_opt_batch and min_losses_for_opt_batch
+                # Find which items in the current trial had a better (lower) loss than previously found.
+                improvement_mask = current_trial_losses < min_losses_for_opt_batch
+                
+                # Update the minimum losses for those improved items
+                min_losses_for_opt_batch[improvement_mask] = current_trial_losses[improvement_mask]
+                
+                # Update the best noises for those improved items
+                # Unsqueeze improvement_mask for broadcasting to noise dimensions
+                best_noises_for_opt_batch[improvement_mask] = current_trial_candidate_noises[improvement_mask]
+
+            # After all trials, best_noises_for_opt_batch contains the best noise found for each item.
+            cur_xt = best_noises_for_opt_batch
+            
+            # Check if any item didn't find a noise (e.g., if all trials resulted in inf loss, though unlikely)
+            if torch.isinf(min_losses_for_opt_batch).any():
+                num_still_inf = torch.isinf(min_losses_for_opt_batch).sum().item()
+                print(f"Warning: {num_still_inf} item(s) in the batch still have inf loss after random search. This is unexpected.")
+            
+            print(f"Random search (batched targets, looping trials) complete for DNO batch {ii+1}.")
+            print(f"  Min losses found for batch items: {min_losses_for_opt_batch.cpu().numpy()}")
+            # --- END of Batched Random Search ---
+
+            # cur_xt is now [opt_batch_size, model.njoints, model.nfeats, n_frames]
+            # Each of the opt_batch_size noises is the best found for its corresponding target.
+            cur_xt = cur_xt.detach().requires_grad_()
+
 
             ######## Main optimization loop #######
             noise_opt = DNO(
