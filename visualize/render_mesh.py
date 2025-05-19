@@ -17,14 +17,19 @@ if __name__ == '__main__':
     # task = "motion_editing"
 
     if task == "normal":
-        assert params.input_path.endswith('.mp4')
-        parsed_name = os.path.basename(params.input_path).replace('.mp4', '').replace('sample', '').replace('rep', '')
-        sample_i, rep_i = [int(e) for e in parsed_name.split('_')]
-        npy_path = os.path.join(os.path.dirname(params.input_path), 'results.npy')
-        out_npy_path = params.input_path.replace('.mp4', '_smpl_params.npy')
-        
-        assert os.path.exists(npy_path)
-        results_dir = params.input_path.replace('.mp4', '_obj')
+        if params.input_path.endswith('.mp4'):
+            parsed_name = os.path.basename(params.input_path).replace('.mp4', '').replace('sample', '').replace('rep', '')
+            sample_i, rep_i = [int(e) for e in parsed_name.split('_')]
+            npy_path = os.path.join(os.path.dirname(params.input_path), 'results.npy')
+            out_npy_path = params.input_path.replace('.mp4', '_smpl_params.npy')
+            assert os.path.exists(npy_path)
+            results_dir = params.input_path.replace('.mp4', '_obj')
+        else:
+            npy_path = params.input_path
+            sample_i, rep_i = 0, 0
+            out_npy_path = params.input_path.replace('.npy', '_smpl_params.npy')
+            assert os.path.exists(npy_path)
+            results_dir = params.input_path.replace('.npy', '_obj')
 
         if os.path.exists(results_dir):
             shutil.rmtree(results_dir)
