@@ -153,7 +153,7 @@ def main():
     "a person is crawling", "a person is doing a long jump"
     The command is: python -m eval.eval_edit --model_path ./save/mdm_avg/model000500000.pt --text_prompt "...(above text)..."
     '''
-    max_samples = 6 # 32
+    max_samples = 96 # 32
     opt_batch_size = 6 # 4
     num_total_batches = math.ceil(max_samples / opt_batch_size)
     # We will generate a new original motion for each batch

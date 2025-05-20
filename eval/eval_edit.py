@@ -356,7 +356,7 @@ def main():
             # Scale to match standard normal distribution 
             # To preserve learnt noise scheduling i.e N(0, 1)
             initial_noise = sin_patterns * 0.5  
-            initial_noise += torch.randn_like(initial_noise) * 0.1
+            initial_noise += torch.randn_like(initial_noise) * 0.5
             
         elif args.noise_init == "perlin":
             print(f"Using Perlin noise initialization with seed {args.seed}")

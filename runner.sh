@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --chdir=.
-#SBATCH --time=5:00:00
+#SBATCH --time=48:00:00
 #SBATCH --mem-per-cpu=10G
 #SBATCH -A digital_human_jobs
 #SBATCH --output="training_log.out"
@@ -33,7 +33,16 @@ python -c "import torch; torch.manual_seed(42); print('Random seed set to 42')"
 
 # python -m eval.eval_edit --model_path ./save/mdm_avg_dno/model000500000_avg.pt --text_prompt "a person is jumping" --seed 10 --output_dir ./eval/jumping/search
 python -m eval.eval_edit_search --model_path ./save/mdm_avg_dno/model000500000_avg.pt --text_prompt "a person is jumping" --seed 10 --output_dir ./eval/jumping/search
-# python -m eval.eval_edit_search_only --model_path ./save/mdm_avg_dno/model000500000_avg.pt --text_prompt "a person is jumping" --seed 10 --output_dir ./eval/jumping/search_only
+python -m eval.eval_edit_search_only --model_path ./save/mdm_avg_dno/model000500000_avg.pt --text_prompt "a person is jumping" --seed 10 --output_dir ./eval/jumping/search_only
+
+python -m eval.eval_edit_search --model_path ./save/mdm_avg_dno/model000500000_avg.pt --text_prompt "a person is crawling" --seed 10 --output_dir ./eval/crawling/search
+python -m eval.eval_edit_search_only --model_path ./save/mdm_avg_dno/model000500000_avg.pt --text_prompt "a person is crawling" --seed 10 --output_dir ./eval/crawling/search_only
+
+python -m eval.eval_edit_search --model_path ./save/mdm_avg_dno/model000500000_avg.pt --text_prompt "a person is walking with raised hands" --seed 10 --output_dir ./eval/raised_hands/search
+python -m eval.eval_edit_search_only --model_path ./save/mdm_avg_dno/model000500000_avg.pt --text_prompt "a person is walking with raised hands" --seed 10 --output_dir ./eval/raised_hands/search_only
+
+python -m eval.eval_edit_search --model_path ./save/mdm_avg_dno/model000500000_avg.pt --text_prompt "a person is doing a long jump" --seed 10 --output_dir ./eval/long_jump/search
+python -m eval.eval_edit_search_only --model_path ./save/mdm_avg_dno/model000500000_avg.pt --text_prompt "a person is doing a long jump" --seed 10 --output_dir ./eval/long_jump/search_only
 
 echo "Training completed successfully."
 echo FINISHED at $(date)
