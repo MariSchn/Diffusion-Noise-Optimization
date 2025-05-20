@@ -193,7 +193,7 @@ def task_motion_blending(task_info, args, target, target_mask):
     obs_list = []
 
     # No target around the seam
-    SEAM_WIDTH = 10 # 15 # 10 # 5 # 3
+    SEAM_WIDTH = args.seam_width # 15 # 10 # 5 # 3
 
     # combined_motions[0] shape [1, 22, 3, 196]
     target[0] = task_info["combine_motion"]

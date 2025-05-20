@@ -154,6 +154,12 @@ def add_sampling_options(parser):
                        help="For classifier-free sampling - specifies the s parameter, as defined in the paper.")
     group.add_argument("--optimizer", default='adam', choices=['sgd', 'rmsprop', 'adam', 'adamw', 'lbfgs', 'lbfgs_normalized'], type=str,
                        help="Optimizer to use for DNO .")
+    group.add_argument("--endpoint_weight", default=1.0, type=float,
+                       help="Weighting factor for loss for the first and last frames of the motion.")
+    group.add_argument("--num_offset", default=0, type=int,
+                       help="Used for Motion Blending. Number of frames to offset the second motion.")
+    group.add_argument("--seam_width", default=10, type=int,
+                       help="Used for Motion Blending. Width of the seam between two motions.")
 
 
 def add_generate_options(parser):
@@ -169,10 +175,14 @@ def add_generate_options(parser):
                             "If no file is specified, will take action names from dataset.")
     group.add_argument("--text_prompt", default='', type=str,
                        help="A text prompt to be generated. If empty, will take text prompts from dataset.")
+    group.add_argument("--text_prompt_2", default='', type=str,
+                       help="A text prompt to be generated for the second motion. This will be used for motion blending between two motions.")
     group.add_argument("--action_name", default='', type=str,
                        help="An action name to be generated. If empty, will take text prompts from dataset.")
     group.add_argument("--load_from", default='', type=str,
                        help="Path to dir of the input output. If empty, will take generate new motion from text prompt.")
+    group.add_argument("--load_from_2", default='', type=str,
+                       help="Path to dir of the second input output. This will be used for motion blending between two motions.")
 
 
 def add_edit_options(parser):
