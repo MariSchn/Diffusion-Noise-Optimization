@@ -3,6 +3,8 @@ import os
 import pickle
 import shutil
 import time
+import math
+from noise import pnoise3
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -339,7 +341,39 @@ def main(num_trials=3):
             torch.manual_seed(0)
             # use the batch size that comes from main()
             gen_shape = [num_trials, model.njoints, model.nfeats, n_frames]
-            cur_xt = torch.randn(gen_shape).to(model_device)
+            
+            # Option 1: Sinusoidal patterns
+            if args.noise_init == "sin":
+                t = torch.linspace(0, 10*math.pi, n_frames).to(model_device)
+                frequencies = torch.linspace(0.1, 2.0, model.njoints*model.nfeats).to(model_device)
+                phases = torch.rand(model.njoints*model.nfeats).to(model_device) * 2 * math.pi
+                
+                sin_patterns = torch.sin(t.view(1, 1, 1, -1) * 
+                                        frequencies.view(1, -1, 1, 1) + 
+                                        phases.view(1, -1, 1, 1))
+                sin_patterns = sin_patterns.reshape(1, model.njoints, model.nfeats, n_frames)
+                sin_patterns = sin_patterns.repeat(num_trials, 1, 1, 1)
+                
+                # Scale to match standard normal distribution
+                # To preserve learnt noise scheduling i.e N(0, 1)
+                cur_xt = sin_patterns * 0.5
+
+            elif args.noise_init == "perlin":
+                # Empty tensor to fill with Perlin noise
+                cur_xt = torch.zeros(gen_shape).to(model_device)
+                
+                # Generate Perlin noise (simplified example)
+                scale = 0.1
+                for b in range(num_trials):
+                    for j in range(model.njoints):
+                        for f in range(model.nfeats):
+                            for t in range(n_frames):
+                                # Generate smoother noise with Perlin
+                                value = pnoise3(j*scale, f*scale, t*scale)
+                                cur_xt[b, j, f, t] = value * 2.0  # Scale to roughly match normal distribution
+            else:
+                # Default to random noise
+                cur_xt = torch.randn(gen_shape).to(model_device)
         else:
             cur_xt = inv_noise.detach().clone()
             cur_xt = cur_xt.repeat(num_trials, 1, 1, 1)

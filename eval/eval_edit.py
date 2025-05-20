@@ -2,6 +2,7 @@ import json
 import math
 import os
 import pickle
+from noise import pnoise3
 
 import numpy as np
 import torch
@@ -289,16 +290,148 @@ def main():
     ###################
     # MODEL INFERENCING
     ###################
+    # Init noise to random and set with flags
+    initial_noise = torch.randn((args.batch_size, model.njoints, model.nfeats, n_frames)).to(model_device)
+    
     sample_file = os.path.join(out_path, "sample_before_edit.pt")
     # Load sample_before_edit from file if exists
     if os.path.exists(sample_file):
         print(f" - Sample already exists. Loading sample_before_edit from [{sample_file}]")
         sample = torch.load(sample_file)
     else:
+        # Generate initial noise based on initialization method
+        shape = (args.batch_size, model.njoints, model.nfeats, n_frames)
+        
+        # Set seed for reproducibility
+        torch.manual_seed(args.seed)
+        
+        if args.noise_init == "clip":
+            print(f"Using text-based noise initialization with seed {args.seed}")
+            # Get text embeddings from CLIP using the base model
+            # Encode text
+            text_embeddings = model.model.encode_text(texts)  # shape: [batch_size, clip_dim]
+            batch_size, clip_dim = text_embeddings.shape
+            njoints, nfeats, n_frames = model.njoints, model.nfeats, n_frames
+            target_shape = (batch_size, njoints, nfeats, n_frames)
+
+            # Total number of elements in the target tensor
+            target_elements = njoints * nfeats * n_frames
+
+            # Flatten target shape (excluding batch) for reshaping
+            text_embeddings_expanded = torch.zeros((batch_size, target_elements), device=text_embeddings.device)
+
+            # Fill as much of the last dimension as possible with CLIP values
+            max_clip_insert = min(clip_dim, n_frames)
+            remaining_dims = njoints * nfeats
+
+            # Project or pad CLIP embeddings into the last dim (n_frames)
+            clip_proj = text_embeddings[:, :max_clip_insert]  # [batch_size, n_used_clip_dim]
+
+            # Fill the last `max_clip_insert` of n_frames in every joint-feat slot
+            # We'll tile it across njoints * nfeats
+            text_embeddings_expanded = torch.randn((batch_size, target_elements), device=text_embeddings.device)
+
+            # Insert clip values in the last dim per (joint, feat)
+            for i in range(remaining_dims):
+                start = i * n_frames + (n_frames - max_clip_insert)
+                end = i * n_frames + n_frames
+                text_embeddings_expanded[:, start:end] = clip_proj
+
+            # Reshape to desired shape
+            initial_noise = text_embeddings_expanded.view(batch_size, njoints, nfeats, n_frames) * 0.5 + initial_noise * 0.5
+            # Normalize to roughly match standard normal distribution
+            # initial_noise = (initial_noise - initial_noise.mean()) / initial_noise.std()
+            
+        elif args.noise_init == "sin":
+            print(f"Using sinusoidal noise initialization with seed {args.seed}")
+            # Create sinusoidal noise pattern
+            t = torch.linspace(0, 10*math.pi, n_frames).to(model_device)
+            frequencies = torch.linspace(0.1, 2.0, model.njoints*model.nfeats).to(model_device)
+            phases = torch.rand(model.njoints*model.nfeats).to(model_device) * 2 * math.pi
+            
+            sin_patterns = torch.sin(t.view(1, 1, 1, -1) * 
+                                    frequencies.view(1, -1, 1, 1) + 
+                                    phases.view(1, -1, 1, 1))
+            sin_patterns = sin_patterns.reshape(1, model.njoints, model.nfeats, n_frames)
+            sin_patterns = sin_patterns.repeat(args.batch_size, 1, 1, 1)
+            
+            # Scale to match standard normal distribution 
+            # To preserve learnt noise scheduling i.e N(0, 1)
+            initial_noise = sin_patterns * 0.5  
+            initial_noise += torch.randn_like(initial_noise) * 0.1
+            
+        elif args.noise_init == "perlin":
+            print(f"Using Perlin noise initialization with seed {args.seed}")
+            # Empty tensor to fill with Perlin noise
+            initial_noise = torch.zeros(shape).to(model_device)
+            
+            # Generate Perlin noise
+            scale = 0.1
+            for b in range(args.batch_size):
+                for j in range(model.njoints):
+                    for f in range(model.nfeats):
+                        for t in range(n_frames):
+                            # Generate smoother noise with Perlin
+                            value = pnoise3(j*scale, f*scale, t*scale)
+                            initial_noise[b, j, f, t] = value 
+
+            initial_noise = initial_noise * 0.5 + torch.randn_like(initial_noise) * 0.5  # Scale to roughly match normal distribution
+            # initial_noise = (initial_noise - initial_noise.mean()) / initial_noise.std() # Z normalization
+
+        elif args.noise_init == "clip_perlin":
+            # Empty tensor to fill with Perlin noise
+            initial_noise = torch.zeros(shape).to(model_device)
+            
+            # Generate Perlin noise
+            scale = 0.1
+            for b in range(args.batch_size):
+                for j in range(model.njoints):
+                    for f in range(model.nfeats):
+                        for t in range(n_frames):
+                            # Generate smoother noise with Perlin
+                            value = pnoise3(j*scale, f*scale, t*scale)
+                            initial_noise[b, j, f, t] = value 
+
+            text_embeddings = model.model.encode_text(texts)  # shape: [batch_size, clip_dim]
+            batch_size, clip_dim = text_embeddings.shape
+            njoints, nfeats, n_frames = model.njoints, model.nfeats, n_frames
+            target_shape = (batch_size, njoints, nfeats, n_frames)
+
+            # Total number of elements in the target tensor
+            target_elements = njoints * nfeats * n_frames
+
+            # Flatten target shape (excluding batch) for reshaping
+            text_embeddings_expanded = torch.zeros((batch_size, target_elements), device=text_embeddings.device)
+
+            # Fill as much of the last dimension as possible with CLIP values
+            max_clip_insert = min(clip_dim, n_frames)
+            remaining_dims = njoints * nfeats
+
+            # Project or pad CLIP embeddings into the last dim (n_frames)
+            clip_proj = text_embeddings[:, :max_clip_insert]  # [batch_size, n_used_clip_dim]
+
+            # Fill the last `max_clip_insert` of n_frames in every joint-feat slot
+            # We'll tile it across njoints * nfeats
+            text_embeddings_expanded = torch.randn((batch_size, target_elements), device=text_embeddings.device)
+
+            # Insert clip values in the last dim per (joint, feat)
+            for i in range(remaining_dims):
+                start = i * n_frames + (n_frames - max_clip_insert)
+                end = i * n_frames + n_frames
+                text_embeddings_expanded[:, start:end] = clip_proj
+
+            # Reshape to desired shape
+            initial_noise = text_embeddings_expanded.view(batch_size, njoints, nfeats, n_frames) * 0.5 + initial_noise * 0.5
+
+            
+        else:
+            print(f"Using random noise initialization with seed {args.seed}")
+            initial_noise = torch.randn(shape).to(model_device)
+        
         # List of samples of shape [bs, njoints, nfeats, nframes]
         sample = diffusion_ori.ddim_sample_loop(
             model,
-            (args.batch_size, model.njoints, model.nfeats, n_frames),
+            shape,
             clip_denoised=False,
             # clip_denoised=not args.predict_xstart,
             model_kwargs=model_kwargs,
@@ -306,7 +439,7 @@ def main():
             init_image=None,
             progress=True,
             dump_steps=None,
-            noise=None,
+            noise=initial_noise,  # Use custom noise
             const_noise=False,
             cond_fn=None,
         )
@@ -363,7 +496,7 @@ def main():
                     init_image=None,
                     progress=True,
                     dump_steps=None,
-                    noise=None,
+                    noise=initial_noise,
                     const_noise=False,
                     cond_fn=None,
                 ).cpu().clone()

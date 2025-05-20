@@ -6,6 +6,15 @@ __pycache__/
 # C extensions
 *.so
 
+# Eval experiments
+eval_edit_000500000_avg/
+eval_edit_*/
+eval/*/
+jumping/*/
+*/samples_*/
+outputs/
+
+
 # Distribution / packaging
 .Python
 build/
