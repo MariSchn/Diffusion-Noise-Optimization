@@ -300,6 +300,7 @@ def main(num_trials=3):
             use_mse_loss=False,
             use_rand_projection=False,
             obs_list=obs_list,
+            motion_length=[gen_frames] * target.shape[0],
             w_endpoint=args.endpoint_weight,
         )
         criterion = lambda x: loss_fn(x, **model_kwargs)

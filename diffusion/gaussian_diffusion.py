@@ -257,7 +257,7 @@ class GaussianDiffusion:
             q(x_{t-1} | x_t, x_0)
 
         """
-        assert x_start.shape == x_t.shape
+        assert x_start.shape == x_t.shape, f"{x_start.shape} != {x_t.shape}"
         posterior_mean = (
             _extract_into_tensor(self.posterior_mean_coef1, t, x_t.shape) * x_start
             + _extract_into_tensor(self.posterior_mean_coef2, t, x_t.shape) * x_t

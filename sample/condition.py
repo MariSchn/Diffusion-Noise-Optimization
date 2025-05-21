@@ -636,8 +636,7 @@ class CondKeyLocationsLoss:
                 # remove the feature dim
                 x_in_joints = x_in_joints.squeeze(1)
 
-
-                m_len = target.shape[1]
+                m_len = motion_length[0]
                 interp_start = torch.linspace(self.w_endpoint, 1, m_len // 2, device=target.device)
                 interp_end = torch.linspace(1, self.w_endpoint, m_len // 2, device=target.device)
 
