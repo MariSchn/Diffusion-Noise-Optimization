@@ -426,23 +426,23 @@ def main():
             print(f"Using random noise initialization with seed {args.seed}")
             initial_noise = torch.randn(shape).to(model_device)
 
-            # List of samples of shape [bs, njoints, nfeats, nframes]
-            sample = diffusion_ori.ddim_sample_loop(
-                model,
-                (args.batch_size, model.njoints, model.nfeats, n_frames),
-                clip_denoised=False,
-                # clip_denoised=not args.predict_xstart,
-                model_kwargs=model_kwargs,
-                skip_timesteps=0,
-                init_image=None,
-                progress=True,
-                dump_steps=None,
-                noise=None,
-                const_noise=False,
-                cond_fn=None,
-            )
-            # Save sample to file
-            torch.save(sample, sample_file)
+        # List of samples of shape [bs, njoints, nfeats, nframes]
+        sample = diffusion_ori.ddim_sample_loop(
+            model,
+            (args.batch_size, model.njoints, model.nfeats, n_frames),
+            clip_denoised=False,
+            # clip_denoised=not args.predict_xstart,
+            model_kwargs=model_kwargs,
+            skip_timesteps=0,
+            init_image=None,
+            progress=True,
+            dump_steps=None,
+            noise=initial_noise,
+            const_noise=False,
+            cond_fn=None,
+        )
+        # Save sample to file
+        torch.save(sample, sample_file)
 
     def generate_holdout_dataset_for_FID(N_holdout, batch_size):
         # generating the hold out dataset for FID calculation
@@ -494,7 +494,7 @@ def main():
                     init_image=None,
                     progress=True,
                     dump_steps=None,
-                    noise=None,
+                    noise=initial_noise,
                     const_noise=False,
                     cond_fn=None,
                 ).cpu().clone()
