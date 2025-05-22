@@ -144,3 +144,5 @@ t2m/
 glove/
 body_models/
 .vscode/
+output/
+logs/

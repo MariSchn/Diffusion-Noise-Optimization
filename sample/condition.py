@@ -636,13 +636,20 @@ class CondKeyLocationsLoss:
                 # remove the feature dim
                 x_in_joints = x_in_joints.squeeze(1)
 
-                m_len = motion_length[0]
-                interp_start = torch.linspace(self.w_endpoint, 1, m_len // 2, device=target.device)
-                interp_end = torch.linspace(1, self.w_endpoint, m_len // 2, device=target.device)
+                if motion_length is None:
+                    m_len = x_in_joints.shape[1]
+                else:
+                    m_len = motion_length[0]
 
-                endpoint_weights = torch.ones_like(target_mask, dtype=torch.float32)
-                endpoint_weights[:, :m_len // 2, :, :] = interp_start[None, :, None, None]
-                endpoint_weights[:, m_len // 2:, :, :] = interp_end[None, :, None, None]
+                if self.w_endpoint != 1:
+                    interp_start = torch.linspace(self.w_endpoint, 1, m_len // 2, device=target.device)
+                    interp_end = torch.linspace(1, self.w_endpoint, m_len // 2, device=target.device)
+
+                    endpoint_weights = torch.ones_like(target_mask, dtype=torch.float32)
+                    endpoint_weights[:, :m_len // 2, :, :] = interp_start[None, :, None, None]
+                    endpoint_weights[:, m_len // 2:, :, :] = interp_end[None, :, None, None]
+                else:
+                    endpoint_weights = torch.ones_like(target_mask)
 
                 self.use_mse_loss = False
                 loss_fn = F.mse_loss if self.use_mse_loss else F.l1_loss
