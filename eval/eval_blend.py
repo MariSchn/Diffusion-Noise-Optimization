@@ -397,7 +397,7 @@ def main(num_trials=8):
 
         # Setup generated motions
         generated_samples = torch.cat([
-            sample[:, :, :, gen_frames // 2 :].expand(num_trials, -1, -1, -1),
+            sample[:, :, :, :gen_frames // 2 ].expand(num_trials, -1, -1, -1),
             optimized_x,
             sample_2[:, :, :, args.num_offset : gen_frames // 2 + args.num_offset].expand(num_trials, -1, -1, -1)
         ], dim=-1)
@@ -440,22 +440,22 @@ def main(num_trials=8):
 
         # Visualize the first generated motion video
         generated_motions_np = generated_motions.detach().cpu().numpy()  # [num_trials, length, 22, 3]
-        if generated_motions_np.shape[0] > 0:
-            motion = generated_motions_np[0]
+        for idx in range(generated_motions_np.shape[0]):
+            motion = generated_motions_np[idx]
             print(f"Debug Video Motion Shape: {motion.shape}")
-            save_path = os.path.join(out_path, f"generated_0.mp4")
+            save_path = os.path.join(out_path, f"generated_{idx}.mp4")
             plot_3d_motion(
             save_path,
             skeleton,
             motion,
             dataset=args.dataset,
-            title="Generated 0",
+            title=f"Generated {idx}",
             fps=fps,
             kframes=kframes,
             obs_list=obs_list,
-            target_pose=target_np[0],
+            target_pose=target_np[idx] if idx < target_np.shape[0] else None,
             gt_frames=[kk for (kk, _) in kframes] if SHOW_TARGET_POSE else [],
-        )
+            )
 
         metrics, metrics_before_edit, fid_dict = calculate_results(
             motion_before_edit, generated_motions,
