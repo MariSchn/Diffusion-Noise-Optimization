@@ -220,7 +220,7 @@ def main(num_trials=8):
             # Create the motion which will be used for the optimization
             gen_sample_full = torch.cat([
                     sample[:, :, :, gen_frames // 2 :],
-                    sample_2[:, :, :, args.num_offset : gen_frames - (gen_frames // 2) + args.num_offset]
+                    sample_2[:, :, :, args.num_offset : gen_frames // 2 + args.num_offset]
                 ], dim=-1)
 
             combined_motions, cur_lengths, cur_texts = sample_to_motion(
@@ -399,7 +399,7 @@ def main(num_trials=8):
         generated_samples = torch.cat([
             sample[:, :, :, :gen_frames // 2 ].expand(num_trials, -1, -1, -1),
             optimized_x,
-            sample_2[:, :, :, args.num_offset : gen_frames // 2 + args.num_offset].expand(num_trials, -1, -1, -1)
+            sample_2[:, :, :, gen_frames // 2 + args.num_offset:].expand(num_trials, -1, -1, -1)
         ], dim=-1)
         generated_motions, _, _ = sample_to_motion(
             generated_samples,
