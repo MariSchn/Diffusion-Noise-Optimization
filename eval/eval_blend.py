@@ -507,7 +507,7 @@ def main(num_trials=8):
         optimized_x = out["x"].detach().clone()
 
         # Setup motion before edit as naiive concatenation
-        sample_before_edit = torch.cat([sample, sample_2], dim=-1)
+        sample_before_edit = torch.cat([sample,  sample_2[:, :, :, args.num_offset:]], dim=-1)
         motion_before_edit, _, _ = sample_to_motion(
             sample_before_edit,
             args,
@@ -542,7 +542,7 @@ def main(num_trials=8):
         target_masks = torch.cat([
             torch.zeros((num_trials, gen_frames // 2, 22, 3), device=model_device).bool(),
             target_mask,
-            torch.zeros((num_trials, gen_frames // 2 + args.num_offset - args.num_offset, 22, 3), device=model_device).bool()
+            torch.zeros((num_trials, gen_frames // 2 - args.num_offset, 22, 3), device=model_device).bool()
         ], dim=1)
         # Visualize the first target video
         target_np = target.detach().cpu().numpy()  # [num_trials, length, 22, 3]
