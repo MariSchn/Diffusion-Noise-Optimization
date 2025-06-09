@@ -183,7 +183,7 @@ def add_generate_options(parser):
                        help="Path to dir of the input output. If empty, will take generate new motion from text prompt.")
     group.add_argument("--load_from_2", default='', type=str,
                        help="Path to dir of the second input output. This will be used for motion blending between two motions.")
-    group.add_argument("--noise_init", default='random', type=str, choices=['random', 'sin', 'perlin', 'mog', 'search', 'clip', 'clip_perlin'],
+    group.add_argument("--noise_init", default='random', type=str, choices=['random', 'sin', 'perlin', 'mog', 'search', 'clip', 'clip_perlin', 'concat'],
                        help="Type of noise initialization to use. 'random' for standard Gaussian noise, 'sin' for sinusoidal patterns, 'mog' for mixture of gaussian")
 
 
