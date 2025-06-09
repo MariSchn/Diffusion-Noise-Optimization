@@ -1,7 +1,6 @@
 #!/bin/bash
 #SBATCH --chdir=.
 #SBATCH --time=48:00:00
-#SBATCH --mem-per-cpu=$SEEDG
 #SBATCH -A digital_human_jobs
 #SBATCH --output="training_log.out"
 #SBATCH --gpus=1
@@ -40,13 +39,18 @@ python -c "import torch; torch.manual_seed(42); print('Random seed set to 42')"
 # ===== NOISE INITIALIZATION =====
 
 # Run the training script
-python -m eval.eval_edit --model_path $MODEL_PATH --text_prompt "a person is jumping" --seed $SEED --noise_init clip_perlin --output_dir ./eval/jumping/clip0.5_perlin_0.5
+# Perlin/Sin noise inits - pass noise type in with flag --noise_init
+python -m eval.eval_edit --model_path $MODEL_PATH --text_prompt "a person is jumping" --seed $SEED --noise_init perlin --output_dir ./eval/jumping/perlin_0.5
 python -m eval.eval_edit --model_path $MODEL_PATH --text_prompt "a person is crawling" --seed $SEED --noise_init perlin --output_dir ./eval/crawling/perlin_z_norm
 python -m eval.eval_edit --model_path $MODEL_PATH --text_prompt "a person is walking with raised hands" --seed $SEED --noise_init perlin --output_dir ./eval/raised_hands/perlin_z_norm
 python -m eval.eval_edit --model_path $MODEL_PATH --text_prompt "a person is doing a long jump" --seed $SEED --output_dir ./eval/long_jump/rand
 
+# Noise init with search 
+# Without search
 python -m eval.eval_edit --model_path $MODEL_PATH --text_prompt "a person is jumping" --seed $SEED --output_dir ./eval/jumping/search
+# Search + DNO
 python -m eval.eval_edit_search --model_path $MODEL_PATH --text_prompt "a person is jumping" --seed $SEED --output_dir ./eval/jumping/search
+# Search only
 python -m eval.eval_edit_search_only --model_path $MODEL_PATH --text_prompt "a person is jumping" --seed $SEED --output_dir ./eval/jumping/search_only
 
 python -m eval.eval_edit_search --model_path $MODEL_PATH --text_prompt "a person is crawling" --seed $SEED --output_dir ./eval/crawling/search
