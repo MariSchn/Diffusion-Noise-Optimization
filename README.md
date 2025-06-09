@@ -4,7 +4,7 @@
 
 To reproduce our results, we provide the `runner.sh` scripts, which executes all our evaluations and saves the results in the `./eval` directory.
 
-To run it, you need to setup the environment as described in the [Getting started](#getting-started) section and additionally add the `pnoise`.
+To run it, you need to setup the environment as described in the [Getting started](#getting-started) section and additionally add the `noise`.
 Afterwards, you can run the script as follows:
 
 ```bash
