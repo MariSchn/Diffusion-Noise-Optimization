@@ -83,6 +83,8 @@ class DNO:
         optimizer_name = conf.optimizer.lower()
         optimizer_kwargs = conf.optimizer_kwargs
 
+        print(f"Using criterion: {self.criterion.__name__}")
+
         if optimizer_name == "adam":
             print("Using Adam optimizer")
             self.optimizer = torch.optim.Adam([self.current_z], lr=conf.lr, **optimizer_kwargs)

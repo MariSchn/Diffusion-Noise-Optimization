@@ -543,7 +543,27 @@ class CondKeyLocations:
             grad = torch.autograd.grad(-loss_sum, x)[0]
             return grad * self.classifiler_scale
 
+def german_mcclure_loss(x, y, sigma=1.0):
+    """
+    Geman-McClure loss function
+    Args:
+        x: predicted values
+        y: target values
+        sigma: scale parameter that controls the robustness
+    """
+    squared_diff = (x - y) ** 2
+    return (sigma * squared_diff) / (sigma + squared_diff)
 
+def cauchy_loss(x, y, sigma=1.0):
+    """
+    Cauchy loss function
+    Args:
+        x: predicted values
+        y: target values
+        sigma: scale parameter that controls the robustness
+    """
+    squared_diff = (x - y) ** 2
+    return torch.log(1 + squared_diff / sigma)
 
 class CondKeyLocationsLoss:
     def __init__(self,
@@ -555,6 +575,8 @@ class CondKeyLocationsLoss:
                  abs_3d=False,
                  reward_model=None,
                  reward_model_args=None,
+                 objective_loss="l2",
+                 objective_sigma=1.0,
                  use_mse_loss=False,
                  guidance_style='xstart',
                  stop_cond_from=0,
@@ -572,7 +594,9 @@ class CondKeyLocationsLoss:
         self.abs_3d = abs_3d
         self.reward_model = reward_model
         self.reward_model_args = reward_model_args
-        self.use_mse_loss = use_mse_loss
+        self.objective_loss = objective_loss
+        self.objective_sigma = objective_sigma
+        self.use_mse_loss = False
         self.guidance_style = guidance_style
         self.stop_cond_from = stop_cond_from
         self.use_rand_projection = use_rand_projection
@@ -651,9 +675,22 @@ class CondKeyLocationsLoss:
                 else:
                     endpoint_weights = torch.ones_like(target_mask)
 
+                losses = {
+                    "l2": F.mse_loss,
+                    "l1": F.l1_loss,
+                    "smooth_l1": F.smooth_l1_loss, #Huber loss
+                    "german_mcclure": german_mcclure_loss, #German-mclure loss (robust to outliers)
+                    "cauchy": cauchy_loss, #Cauchy loss (more robust to outliers)
+                }
+
                 self.use_mse_loss = False
-                loss_fn = F.mse_loss if self.use_mse_loss else F.l1_loss
-                loss_sum = loss_fn(x_in_joints, target, reduction="none") * target_mask * motion_mask * endpoint_weights
+                loss_fn = losses[self.objective_loss]
+                # print("using loss function: ", self.objective_loss, "with sigma: ", self.objective_sigma)
+
+                if self.objective_loss == "german_mcclure" or self.objective_loss == "cauchy":
+                    loss_sum = loss_fn(x_in_joints, target, sigma=self.objective_sigma) * target_mask * motion_mask * endpoint_weights
+                else:
+                    loss_sum = loss_fn(x_in_joints, target, reduction="none") * target_mask * motion_mask * endpoint_weights
 
                 adaptive_mean = True
                 if adaptive_mean: 
@@ -683,8 +720,6 @@ class CondKeyLocationsLoss:
             # #     print("%03d: %f" % (int(t[0]), float(loss_sum) / batch_size))
 
             return loss_sum
-
-
 
 class CondKeyLocationsWithSdf:
     def __init__(self,
