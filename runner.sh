@@ -73,6 +73,26 @@ for TEXT_PROMPT in "${PROMPTS[@]}"; do
 
 done
 
+# ===== OBJECTIVE ABLATION =====
+
+for TEXT_PROMPT in "${PROMPTS[@]}"; do
+    # Sanitize prompt for directory name (replace spaces with underscores, remove special chars)
+    SANITIZED_PROMPT=$(echo "$TEXT_PROMPT" | tr ' ' '_' | sed 's/[^a-zA-Z0-9_]//g')
+
+    python -m eval.eval_edit_objectives --model_path $MODEL_PATH --text_prompt "$TEXT_PROMPT" --seed $SEED --optimizer adam --objective_loss l1 --output_dir ./output/"$SANITIZED_PROMPT"/l1
+    python -m eval.eval_edit_objectives --model_path $MODEL_PATH --text_prompt "$TEXT_PROMPT" --seed $SEED --optimizer adam --objective_loss l2 --output_dir ./output/"$SANITIZED_PROMPT"/l2
+    python -m eval.eval_edit_objectives --model_path $MODEL_PATH --text_prompt "$TEXT_PROMPT" --seed $SEED --optimizer adam --objective_loss smooth_l1 --output_dir ./output/"$SANITIZED_PROMPT"/smooth_l1
+
+    python -m eval.eval_edit_objectives --model_path $MODEL_PATH --text_prompt "$TEXT_PROMPT" --seed $SEED --optimizer adam --objective_loss german_mcclure --objective_sigma 0.5 --output_dir ./output/"$SANITIZED_PROMPT"/german_mcclure_sigma0.5
+    python -m eval.eval_edit_objectives --model_path $MODEL_PATH --text_prompt "$TEXT_PROMPT" --seed $SEED --optimizer adam --objective_loss german_mcclure --objective_sigma 1.0 --output_dir ./output/"$SANITIZED_PROMPT"/german_mcclure_sigma1.0
+    python -m eval.eval_edit_objectives --model_path $MODEL_PATH --text_prompt "$TEXT_PROMPT" --seed $SEED --optimizer adam --objective_loss german_mcclure --objective_sigma 2.0 --output_dir ./output/"$SANITIZED_PROMPT"/german_mcclure_sigma2.0
+
+    python -m eval.eval_edit_objectives --model_path $MODEL_PATH --text_prompt "$TEXT_PROMPT" --seed $SEED --optimizer adam --objective_loss cauchy --objective_sigma 0.5 --output_dir ./output/"$SANITIZED_PROMPT"/cauchy_sigma0.5
+    python -m eval.eval_edit_objectives --model_path $MODEL_PATH --text_prompt "$TEXT_PROMPT" --seed $SEED --optimizer adam --objective_loss cauchy --objective_sigma 1.0 --output_dir ./output/"$SANITIZED_PROMPT"/cauchy_sigma1.0
+    python -m eval.eval_edit_objectives --model_path $MODEL_PATH --text_prompt "$TEXT_PROMPT" --seed $SEED --optimizer adam --objective_loss cauchy --objective_sigma 2.0 --output_dir ./output/"$SANITIZED_PROMPT"/cauchy_sigma2.0
+
+done
+
 # ===== LONG-TERM/BLEND EVALUATION =====
 
 Generate initial motions
