@@ -1,4 +1,23 @@
 # Diffusion-Noise-Optimization
+
+## Reproducability
+
+To reproduce our results, we provide the `runner.sh` scripts, which executes all our evaluations and saves the results in the `./eval` directory.
+
+To run it, you need to setup the environment as described in the [Getting started](#getting-started) section and additionally add the `pnoise`.
+Afterwards, you can run the script as follows:
+
+```bash
+sbatch runner.sh
+``` 
+or if you are not using SLURM, you can run it directly:
+
+```bash
+bash runner.sh
+```
+
+
+## Overview
 DNO: Optimizing Diffusion Noise Can Serve As Universal Motion Priors
 
 [![arXiv](https://img.shields.io/badge/arXiv-<2312.11994>-<COLOR>.svg)](https://arxiv.org/abs/2312.11994)
