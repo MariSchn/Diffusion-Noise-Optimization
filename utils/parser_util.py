@@ -95,7 +95,6 @@ def add_model_options(parser):
                             "Currently tested on HumanAct12 only.")
 
 
-
 def add_data_options(parser):
     group = parser.add_argument_group('dataset')
     group.add_argument("--dataset", default='humanml', choices=['humanml', 'kit', 'humanact12', 'uestc'], type=str,
@@ -154,6 +153,8 @@ def add_sampling_options(parser):
                        help="For classifier-free sampling - specifies the s parameter, as defined in the paper.")
     group.add_argument("--optimizer", default='adam', choices=['sgd', 'rmsprop', 'adam', 'adamw', 'lbfgs', 'lbfgs_normalized'], type=str,
                        help="Optimizer to use for DNO .")
+    group.add_argument("--objective_loss", default='l2', choices=['l2', 'l1', 'smooth_l1', 'german_mcclure', 'cauchy'], type=str,)
+    group.add_argument("--objective_sigma", default=1.0, type=float,)
 
 
 def add_generate_options(parser):
