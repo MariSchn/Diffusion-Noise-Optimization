@@ -5,6 +5,7 @@
 To reproduce our results, we provide the `runner.sh` scripts, which executes all our evaluations and saves the results in the `./eval` directory.
 
 To run it, you need to setup the environment as described in the [Getting started](#getting-started) section and additionally add the `noise`.
+Additionally, you need to set the `MODEL_PATH` variable in the `runner.sh` script to point to the path of the MDM model you downloaded in the [Getting started](#getting-started) section. and change the code to update the environment in `runner.sh` (see comments in `runner.sh`).
 Afterwards, you can run the script as follows:
 
 ```bash
