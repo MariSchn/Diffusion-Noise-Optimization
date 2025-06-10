@@ -99,7 +99,7 @@ done
 
 # ===== LONG-TERM/BLEND EVALUATION =====
 
-Generate initial motions
+# Generate initial motions
 python -m sample.text_to_motion --model_path $MODEL_PATH --text_prompt "a person is walking forward" --output_dir ./save/walk
 python -m sample.text_to_motion --model_path $MODEL_PATH --text_prompt "a person is jumping" --output_dir ./save/jumping
 
@@ -111,11 +111,13 @@ python -m eval.eval_blend --model_path $MODEL_PATH --seed $SEED --load_from ./sa
 python -m eval.eval_blend --model_path $MODEL_PATH --seed $SEED --load_from ./save/walk --text_prompt "a person walking and then jumping" --load_from_2 ./save/jumping --output_dir ./eval/blend_easy/dno_weighted --endpoint_weight 10 --num_offset 0 --seam_width 10 --noise_init random
 python -m eval.eval_blend --model_path $MODEL_PATH --seed $SEED --load_from ./save/walk --text_prompt "a person walking and then jumping" --load_from_2 ./save/jumping --output_dir ./eval/blend_easy/dno_weighted_concat_noise --endpoint_weight 10 --num_offset 0 --seam_width 10 --noise_init concat
 python -m eval.eval_blend --model_path $MODEL_PATH --seed $SEED --load_from ./save/walk --text_prompt "a person walking and then jumping" --load_from_2 ./save/jumping --output_dir ./eval/blend_easy/dno_weighted_sin_noise --endpoint_weight 10 --num_offset 0 --seam_width 10 --noise_init sin
+python -m eval.eval_blend --model_path $MODEL_PATH --seed $SEED --load_from ./save/walk --text_prompt "a person walking and then jumping" --load_from_2 ./save/jumping --output_dir ./eval/blend_easy/dno_weighted_perlin_noise --endpoint_weight 10 --num_offset 0 --seam_width 10 --noise_init perlin
 
 python -m eval.eval_blend --model_path $MODEL_PATH --seed $SEED --load_from ./save/long_jump --text_prompt "a person doing a long jump and then crawling" --load_from_2 ./save/crawling --output_dir ./eval/blend_hard/dno  --endpoint_weight 1 --num_offset 20 --seam_width 30 --noise_init random
 python -m eval.eval_blend --model_path $MODEL_PATH --seed $SEED --load_from ./save/long_jump --text_prompt "a person doing a long jump and then crawling" --load_from_2 ./save/crawling --output_dir ./eval/blend_hard/dno_weighted --endpoint_weight 10 --num_offset 0 --seam_width 30 --noise_init random
 python -m eval.eval_blend --model_path $MODEL_PATH --seed $SEED --load_from ./save/long_jump --text_prompt "a person doing a long jump and then crawling" --load_from_2 ./save/crawling --output_dir ./eval/blend_hard/dno_weighted_concat_noise --endpoint_weight 10 --num_offset 0 --seam_width 30 --noise_init concat
 python -m eval.eval_blend --model_path $MODEL_PATH --seed $SEED --load_from ./save/long_jump --text_prompt "a person doing a long jump and then crawling" --load_from_2 ./save/crawling --output_dir ./eval/blend_hard/dno_weighted_sin_noise --endpoint_weight 10 --num_offset 0 --seam_width 30 --noise_init sin
+python -m eval.eval_blend --model_path $MODEL_PATH --seed $SEED --load_from ./save/long_jump --text_prompt "a person doing a long jump and then crawling" --load_from_2 ./save/crawling --output_dir ./eval/blend_hard/dno_weighted_perlin_noise --endpoint_weight 10 --num_offset 0 --seam_width 30 --noise_init perlin
 
 echo "Training completed successfully."
 echo FINISHED at $(date)
